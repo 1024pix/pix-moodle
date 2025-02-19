@@ -1,0 +1,60 @@
+services:
+  traefik:
+    image: traefik:latest
+    command:
+      - "--log.level=DEBUG"
+      - "--api.insecure=true"
+      - "--providers.docker=true"
+      - "--providers.docker.network=traefik"
+      - "--entrypoints.web.address=:80"
+      - "--entrypoints.websecure.address=:443"
+      # LETSENCRYPT
+      - "--certificatesresolvers.myresolver.acme.tlschallenge=true"
+      - "--certificatesresolvers.myresolver.acme.email=team-captain@pix.fr"
+      - "--certificatesresolvers.myresolver.acme.storage=/letsencrypt/acme.json"
+      - "--providers.docker.exposedbydefault=false"
+
+    networks:
+      - traefik
+
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - "/var/run/docker.sock:/var/run/docker.sock"
+      - letsencrypt_certs:/letsencrypt
+
+  moodle:
+    image: "moodlehq/moodle-php-apache:${MOODLE_DOCKER_PHP_VERSION}"
+    depends_on:
+      - db
+    volumes:
+      - "${MOODLE_DOCKER_WWWROOT}:/var/www/html"
+      - "${ASSETDIR}/web/apache2_faildumps.conf:/etc/apache2/conf-enabled/apache2_faildumps.conf"
+    env_file:
+      - .env
+    networks:
+      - traefik
+      - db
+    labels:
+      - "traefik.enable=true"
+      - "traefik.docker.network=traefik"
+      - "traefik.http.routers.moodle.rule=Host(`moodle.pix.digital`)"
+      - "traefik.http.routers.moodle.entrypoints=websecure"
+      - "traefik.http.routers.moodle.tls=true"
+      - "traefik.http.routers.moodle.tls.certresolver=myresolver"
+      - "traefik.http.services.moodle.loadbalancer.server.port=80"
+
+  db:
+    image: postgres:${MOODLE_DOCKER_DB_VERSION:-14}
+    env_file:
+      - .env
+    networks:
+      - db
+
+volumes:
+  letsencrypt_certs:
+
+networks:
+  traefik:
+  db:
